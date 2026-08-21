@@ -1,5 +1,55 @@
-const CACHE='hk-trip-2026-v3';
+const CACHE='hk-trip-2026-v4';
 const ASSETS=['./','./index.html','./manifest.webmanifest'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html'))))});
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+
+const FLIGHT_PATCH=`<script>(function(){
+  function applyFlightInfo(){
+    const flightCard=document.querySelector('.trip-info .info-card:first-child');
+    if(flightCard){
+      flightCard.innerHTML='<h3>✈️ 機票資訊</h3><div style="display:grid;gap:10px"><div style="padding:11px;border-radius:13px;background:var(--bg);border:1px solid var(--line)"><div style="font-size:13px;color:var(--sub);margin-bottom:5px">去程｜8/22｜UO 131</div><div style="font-size:16px">10:15 高雄 KHH → 11:45 香港 HKG</div><div style="font-size:12px;color:var(--sub);margin-top:4px">飛行時間約 1 小時 30 分</div></div><div style="padding:11px;border-radius:13px;background:var(--bg);border:1px solid var(--line)"><div style="font-size:13px;color:var(--sub);margin-bottom:5px">回程｜8/25｜BR 850</div><div style="font-size:16px">19:25 香港 HKG → 21:00 高雄 KHH</div><div style="font-size:12px;color:var(--sub);margin-top:4px">飛行時間約 1 小時 35 分</div></div></div>';
+    }
+    const day=document.querySelector('#day-0825');
+    if(day){
+      const note=day.querySelector('.date-note'); if(note) note.textContent='回程日';
+      const empty=day.querySelector('.empty'); if(empty) empty.remove();
+      const timeline=day.querySelector('.timeline');
+      if(timeline && !timeline.querySelector('[data-id="0825-flight"]')){
+        const a=document.createElement('article');
+        a.className='stop'; a.dataset.id='0825-flight';
+        a.innerHTML='<div class="stop-head"><div class="num">✈️</div><div class="stop-main"><div class="stop-title">回程航班・BR 850</div><div class="stop-note">19:25 香港 HKG 起飛 → 21:00 高雄 KHH 抵達｜飛行時間約 1 小時 35 分。</div><div class="stop-actions"><button class="editbtn doneBtn">✓ 完成</button></div></div></div>';
+        timeline.prepend(a);
+        if(typeof updateProgress==='function') updateProgress();
+      }
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',applyFlightInfo); else applyFlightInfo();
+})();<\/script>`;
+
+async function injectFlight(response){
+  const type=response.headers.get('content-type')||'';
+  if(!type.includes('text/html')) return response;
+  let text=await response.text();
+  if(!text.includes('UO 131')) text=text.replace('</body>',FLIGHT_PATCH+'</body>');
+  const headers=new Headers(response.headers);
+  headers.delete('content-length'); headers.delete('content-encoding');
+  return new Response(text,{status:response.status,statusText:response.statusText,headers});
+}
+
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET') return;
+  if(e.request.mode==='navigate'){
+    e.respondWith((async()=>{
+      try{
+        const r=await fetch(e.request);
+        const copy=r.clone(); caches.open(CACHE).then(c=>c.put('./index.html',copy));
+        return await injectFlight(r);
+      }catch(_){
+        const cached=await caches.match('./index.html');
+        return cached?injectFlight(cached):Response.error();
+      }
+    })());
+    return;
+  }
+  e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r}).catch(()=>caches.match(e.request)));
+});
