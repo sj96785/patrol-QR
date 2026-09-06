@@ -41,7 +41,7 @@
       top:max(8px,env(safe-area-inset-top));
       z-index:10;
       display:grid;
-      grid-template-columns:1fr 1fr 1fr;
+      grid-template-columns:1fr 1fr;
       gap:6px;
       padding:5px;
       margin:0 0 12px;
@@ -133,7 +133,6 @@
     <nav class="tabs" aria-label="點位清單">
       <button class="tab active" type="button" data-mode="patrol" aria-selected="true">巡</button>
       <button class="tab" type="button" data-mode="select" aria-selected="false">選</button>
-      <button class="tab" type="button" data-mode="merged" aria-selected="false">合併</button>
     </nav>
 
     <section class="card" aria-live="polite">
@@ -184,9 +183,7 @@
   }
 
   function currentPoints() {
-    if (mode === "patrol") return PATROL_POINTS;
-    if (mode === "select") return SELECT_POINTS;
-    return PATROL_POINTS.concat(SELECT_POINTS);
+    return mode === "select" ? SELECT_POINTS : PATROL_POINTS;
   }
 
   function findNearest(latitude, longitude, points) {
@@ -231,7 +228,7 @@
 
     nameEl.textContent = nearest.point.name;
 
-    if (mode !== "patrol" && nearest.point.address) {
+    if (mode === "select" && nearest.point.address) {
       addressEl.textContent = nearest.point.address;
       addressEl.style.display = "block";
     } else {
@@ -248,9 +245,7 @@
     placeholderEl.style.display = "none";
 
     const accuracy = Math.round(lastPosition.coords.accuracy || 0);
-    const listName =
-      mode === "patrol" ? "巡" :
-      mode === "select" ? "選" : "合併";
+    const listName = mode === "select" ? "選" : "巡";
     statusEl.textContent =
       `${listName}清單｜定位持續更新中｜目前定位精確度約 ±${accuracy} 公尺`;
   }
